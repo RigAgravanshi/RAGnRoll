@@ -1,6 +1,7 @@
 import pandas as pd
+from src.config_loader import CFG
 
-df = pd.read_csv(r"data\processed\cleaned_spotify_1M.csv")
+df = pd.read_csv(CFG['data']['raw_path'])
 
 def bucket_audio_features(df) -> pd.DataFrame :
 
@@ -74,4 +75,4 @@ df_processed = df_label.drop(columns=label_cols)
 
 print(df_processed.shape)
 
-df_processed.to_csv("processed_tracks.csv", index=False)
+df_processed.to_csv("final_processed_tracks.csv", index=False)

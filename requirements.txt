@@ -3,7 +3,11 @@ langchain-core
 langchain-community 
 langchain-ollama 
 langchain-huggingface 
- 
+
+sentence-transformers
+faiss-cpu
+pyarrow
+e .
 python-dotenv 
 
 scikit-learn 

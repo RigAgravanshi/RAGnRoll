@@ -1,0 +1,17 @@
+data:
+  raw_path: "data/processed/cleaned_spotify_1M.csv"
+  processed_path: "data/processed/final_processed_tracks.csv"
+  metadata_path: "data/indexes/track_metadata.parquet"
+
+indexing:
+  embeddings_path: "data/indexes/embeddings.npy"
+  faiss_index_path: "data/indexes/faiss.index"
+  model_name: "BAAI/bge-small-en-v1.5"
+  batch_size: 512
+  embedding_dim: 384
+
+retrieval:
+  top_k_candidates: 300
+
+playlist:
+  default_length: 20

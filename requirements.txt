@@ -1,0 +1,15 @@
+langchain 
+langchain-core 
+langchain-community 
+langchain-ollama 
+langchain-huggingface 
+ 
+python-dotenv 
+
+scikit-learn 
+numpy 
+pandas 
+transformers
+torch
+
+pydantic

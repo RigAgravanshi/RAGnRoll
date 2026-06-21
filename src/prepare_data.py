@@ -75,4 +75,4 @@ df_processed = df_label.drop(columns=label_cols)
 
 print(df_processed.shape)
 
-df_processed.to_csv("final_processed_tracks.csv", index=False)
+df_processed.to_csv(CFG['data']['processed_path'], index=False)

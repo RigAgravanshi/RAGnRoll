@@ -11,7 +11,4 @@ indexing:
   embedding_dim: 384
 
 retrieval:
-  top_k_candidates: 300
-
-playlist:
-  default_length: 20
+  llm_model: "qwen2.5:7b"

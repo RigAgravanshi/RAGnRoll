@@ -6,26 +6,20 @@ from dotenv import load_dotenv
 from src.config_loader import CFG
 from sentence_transformers import SentenceTransformer
 from src.parser import parse_intent
-# from langchain_community.vectorstores import FAISS
-# from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 
 load_dotenv()
 start = time.time()
 index = faiss.read_index(CFG['indexing']['faiss_index_path'])
 metadata = pd.read_parquet(CFG['data']['metadata_path'])
 model = SentenceTransformer(CFG['indexing']['model_name'], model_kwargs={"token": os.getenv("HF_KEY")})
-# embedding_model = HuggingFaceBgeEmbeddings(
-#     model_name=CFG['indexing']['model_name'],
-#     query_instruction="Represent this sentence for searching relevant passages: ",
-#     encode_kwargs={"normalize_embeddings": True})
-# vectorstore = FAISS.load_local(							# works only if faiss_index were created initially via langchain. would do it from start
-#     CFG['indexing']['faiss_index_path'],
-#     embeddings=embedding_model,
-#     allow_dangerous_deserialization=True)
 
-def retrieve(prompt:str, k:int = 200) -> pd.DataFrame:
+HARD_FILTERS = ['valence', 'energy']
+SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
+features = ['energy', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'danceability']
+
+def retrieve(query: str, k:int = 200) -> pd.DataFrame:
 	# BGE model requires prefix to signal it to work with the prompt
-	prefixed = "Represent this sentence for searching relevant passages: " + prompt
+	prefixed = "Represent this sentence for searching relevant passages: " + query
 
 	encoded_prompt = model.encode(prefixed)		      	# (384, )
 	encoded_prompt = encoded_prompt.reshape(1, -1) 		# (1,384)
@@ -34,41 +28,62 @@ def retrieve(prompt:str, k:int = 200) -> pd.DataFrame:
 
 	result_df = metadata.iloc[indices[0]].copy()
 	result_df['similarity_score'] = distances[0]
+	result_df = result_df[result_df['popularity'] > 15] 		# TRYING RESULT_DF popularity FILTERING
 	return result_df
-	# results = vectorstore.similarity_search_with_score(prompt, k=k) # results = [(Document, score), (Document, score), ...]
-	# rows = []
-	# for doc, score in results:
-	# 	row = doc.metadata
-	# 	row['similarity_score'] = score
-	# 	rows.append(row)
-	# return pd.DataFrame(rows)
-
+ 
 def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 	filtered = songs.copy()
-	playlist_length = intent.get("playlist_length", 15) # 15  was given as a default to LLM itself
+	playlist_length = intent.get("playlist_length", 15)
 
-	# filtering rows based on values
-	for feature in ['energy', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'danceability']:
-		if feature in intent:
-			low, high = intent[feature]
-			before = len(filtered)
-			actual_low = songs[feature].quantile(low)
-			actual_high = songs[feature].quantile(high)
-			filtered = filtered[filtered[feature].between(actual_low, actual_high)]
-			print(f"{feature} [{low}, {high}]: {before} -> {len(filtered)}")
+	for feature in HARD_FILTERS:
+		if feature not in intent:
+			continue
+		low, high = intent[feature]
+        # expand bounds by 20% to avoid over-filtering
+		margin = (high - low) * 0.2
+		before = len(filtered)
+		filtered = filtered[filtered[feature].between(max(0.0, low - margin), min(1.0, high + margin))]
+		print(f"[HARD] {feature} [{max(0.0, low - margin):.2f}, {min(1.0, high + margin):.2f}]: {before} -> {len(filtered)}")
 
+    # Fallback: if still too few, return everything
 	if len(filtered) < playlist_length:
-		print(f"[WARN] Only {len(filtered)} songs after filtering as per Intent. Returning unfiltered Songs.")
+		print(f"[WARN] {len(filtered)} after hard filter. Returning full pool.")
 		return songs
 
-	return filtered
+	print(f"[INFO] {len(filtered)} songs pass hard filter. {playlist_length} is the playlist length.")
+	return filtered[ :playlist_length]
 
-test_prompt = "rainy evening slow melancholic 10 songs to enjoy"
-results = retrieve(test_prompt, k=500)
-# print(results[['track_name', 'artist_name', 'genre', 'energy', 'instrumentalness', 'valence', 'similarity_score']])
+def _label(mid: float) -> str:
+    if mid < 0.2:   return "very low"
+    if mid < 0.4:   return "low"
+    if mid < 0.6:   return "medium"
+    if mid < 0.75:  return "high"
+    return "very high"
+
+def build_retrieval_query(intent: dict) -> str:
+    parts = []
+    for f in HARD_FILTERS:
+        if f in intent:
+            low, high = intent[f]
+            if [low, high] == [0.0, 1.0]:  # unconstrained, skip
+                continue
+            mid = (low + high) / 2
+            parts.append(f"{_label(mid)} {f}")
+    parts += intent.get("moods", [])
+    parts += intent.get("activities", [])
+    return " ".join(parts)
+
+#Flow: prompt given: LLM gives intent_dict as per prompt. Query is rebuilt in build_retr_query. query send for retrieval. retrieved results sent for filter.
+
+test_prompt = "A classy, slow Italian playlist with mafia-vibes for deep thinking. Around 9-10 songs"
 
 intent_dict = parse_intent(test_prompt)
 print(intent_dict)
+
+query = build_retrieval_query(intent_dict)
+print(f"[QUERY] {query}")
+
+results = retrieve(query, k=1000)
 filtered = filter_songs(results, intent_dict)
 print(filtered[['track_name', 'artist_name', 'energy', 'valence', 'similarity_score']])
 print(f"Songs: {len(results)} --> Filtered: {len(filtered)}")

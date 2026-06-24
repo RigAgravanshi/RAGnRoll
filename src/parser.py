@@ -122,7 +122,7 @@ prompt_template = PromptTemplate(
 if __name__ == "__main__":
 	example1 = "A classy, slow Italian playlist with mafia-vibes for deep thinking. Around 9-10 songs"
 	example2 = "A classical music playlist to lock-in when u r on a deadline"
-	example3 = "Suggest songs that would fit a cyberpunk movie set in Mumbai"
+	example3 = "Suggest songs that would fit a cyberpunk movie set in India"
 	example4 = "I want songs for a late-night train journey after a difficult breakup."
 	user_prompt = example1
 	result = parse_intent(user_prompt)

@@ -15,15 +15,11 @@ I BROKE MYSELF TRYING TO SOLVE THIS RANKER.PY IMPORT ERROR
 '''
 load_dotenv()
 start = time.time()
-print("[RETRIEVER] loading FAISS index...")
 index = faiss.read_index(CFG['indexing']['faiss_index_path'])
 print("[RETRIEVER] FAISS loaded")
-print("[RETRIEVER] loading metadata...")
 metadata = pd.read_parquet(CFG['data']['metadata_path'])
 print("[RETRIEVER] metadata loaded")
-print("[RETRIEVER] loading model...")
 model = SentenceTransformer(CFG['indexing']['model_name'], model_kwargs={"token": os.getenv("HF_KEY")})
-print("[RETRIEVER] model loaded")
 
 HARD_FILTERS = ['valence', 'energy']
 SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
@@ -88,7 +84,7 @@ def rebuild_retrieval_query(intent: dict) -> str:
 
 if __name__ == "__main__":
 	from src.parser import parse_intent
-	test_prompt =  "Suggest songs that would fit a cyberpunk movie set in Mumbai"
+	test_prompt =  "Suggest songs that would fit a cyberpunk movie set in India"
 	intent_dict = parse_intent(test_prompt)
 	query = rebuild_retrieval_query(intent_dict)
 	results = retrieve(query, k=1000)
@@ -96,7 +92,7 @@ if __name__ == "__main__":
 
 	print(intent_dict)
 	print(f"[QUERY] {query}")
-	print(filtered[['track_name', 'artist_name', 'energy', 'valence', 'similarity_score']])
+	print(filtered[['track_name', 'artist_name', 'energy', 'valence', 'similarity_score']].sort_values(by="similarity_score", ascending=False))
 	print(f"Songs: {len(results)} --> Filtered: {len(filtered)}")
 
 	print(f"\n\nTime taken: {time.time()-start} \n\n")

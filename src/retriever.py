@@ -28,7 +28,7 @@ def retrieve(query: str, k:int = 200) -> pd.DataFrame:
 
 	result_df = metadata.iloc[indices[0]].copy()
 	result_df['similarity_score'] = distances[0]
-	result_df = result_df[result_df['popularity'] > 15] 		# TRYING RESULT_DF popularity FILTERING
+	result_df = result_df[result_df['popularity'] > 15]
 	return result_df
  
 def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
@@ -60,7 +60,7 @@ def _label(mid: float) -> str:
     if mid < 0.75:  return "high"
     return "very high"
 
-def build_retrieval_query(intent: dict) -> str:
+def rebuild_retrieval_query(intent: dict) -> str:
     parts = []
     for f in HARD_FILTERS:
         if f in intent:
@@ -70,22 +70,20 @@ def build_retrieval_query(intent: dict) -> str:
             mid = (low + high) / 2
             parts.append(f"{_label(mid)} {f}")
     parts += intent.get("moods", [])
-    parts += intent.get("activities", [])
+    # parts += intent.get("activities", [])
     return " ".join(parts)
 
-#Flow: prompt given: LLM gives intent_dict as per prompt. Query is rebuilt in build_retr_query. query send for retrieval. retrieved results sent for filter.
 
-test_prompt = "A classy, slow Italian playlist with mafia-vibes for deep thinking. Around 9-10 songs"
+if __name__ == "__main__":
+	test_prompt =  "A classy, slow Italian playlist with mafia-vibes for deep thinking. Around 9-10 songs"
+	intent_dict = parse_intent(test_prompt)
+	query = rebuild_retrieval_query(intent_dict)
+	results = retrieve(query, k=1000)
+	filtered = filter_songs(results, intent_dict)
 
-intent_dict = parse_intent(test_prompt)
-print(intent_dict)
+	print(intent_dict)
+	print(f"[QUERY] {query}")
+	print(filtered[['track_name', 'artist_name', 'energy', 'valence', 'similarity_score']])
+	print(f"Songs: {len(results)} --> Filtered: {len(filtered)}")
 
-query = build_retrieval_query(intent_dict)
-print(f"[QUERY] {query}")
-
-results = retrieve(query, k=1000)
-filtered = filter_songs(results, intent_dict)
-print(filtered[['track_name', 'artist_name', 'energy', 'valence', 'similarity_score']])
-print(f"Songs: {len(results)} --> Filtered: {len(filtered)}")
-
-print(f"\n\nTime taken: {time.time()-start} \n\n")
+	print(f"\n\nTime taken: {time.time()-start} \n\n")

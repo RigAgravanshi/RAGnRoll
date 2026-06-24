@@ -2,16 +2,28 @@ import os
 import faiss
 import time
 import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
 from dotenv import load_dotenv
 from src.config_loader import CFG
 from sentence_transformers import SentenceTransformer
-from src.parser import parse_intent
 
+'''NOTED FOR LATERRRR!!!!!
+MOVE ALL THIS HEAVY LOADING INTO A SINGLE FUNCTION load() FOR A PERMANENT FIX.
+KINDLY DO THIS MAN.
+I BROKE MYSELF TRYING TO SOLVE THIS RANKER.PY IMPORT ERROR
+'''
 load_dotenv()
 start = time.time()
+print("[RETRIEVER] loading FAISS index...")
 index = faiss.read_index(CFG['indexing']['faiss_index_path'])
+print("[RETRIEVER] FAISS loaded")
+print("[RETRIEVER] loading metadata...")
 metadata = pd.read_parquet(CFG['data']['metadata_path'])
+print("[RETRIEVER] metadata loaded")
+print("[RETRIEVER] loading model...")
 model = SentenceTransformer(CFG['indexing']['model_name'], model_kwargs={"token": os.getenv("HF_KEY")})
+print("[RETRIEVER] model loaded")
 
 HARD_FILTERS = ['valence', 'energy']
 SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
@@ -51,7 +63,7 @@ def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 		return songs
 
 	print(f"[INFO] {len(filtered)} songs pass hard filter. {playlist_length} is the playlist length.")
-	return filtered[ :playlist_length]
+	return filtered
 
 def _label(mid: float) -> str:
     if mid < 0.2:   return "very low"
@@ -75,7 +87,8 @@ def rebuild_retrieval_query(intent: dict) -> str:
 
 
 if __name__ == "__main__":
-	test_prompt =  "A classy, slow Italian playlist with mafia-vibes for deep thinking. Around 9-10 songs"
+	from src.parser import parse_intent
+	test_prompt =  "Suggest songs that would fit a cyberpunk movie set in Mumbai"
 	intent_dict = parse_intent(test_prompt)
 	query = rebuild_retrieval_query(intent_dict)
 	results = retrieve(query, k=1000)

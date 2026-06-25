@@ -1,13 +1,26 @@
+import time
+
+import httpx
 from langchain_ollama import OllamaLLM
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
+from ollama import ResponseError
 from src.config_loader import CFG
 
-def parse_intent(user_prompt: str) -> dict:
+_OLLAMA_RETRY_ERRORS = (ResponseError, httpx.ConnectError, ConnectionError)
+
+def parse_intent(user_prompt: str, max_retries: int = 3) -> dict:
 	llm = OllamaLLM(model=CFG['retrieval']['llm_model'])
 	chain = prompt_template | llm | JsonOutputParser()
-	response = chain.invoke({'user_prompt': user_prompt})
-	return response
+	for attempt in range(1, max_retries + 1):
+		try:
+			return chain.invoke({'user_prompt': user_prompt})
+		except _OLLAMA_RETRY_ERRORS as e:
+			if attempt == max_retries:
+				raise
+			wait = 2 * attempt
+			print(f"[PARSER] Ollama error (attempt {attempt}/{max_retries}): {e}. Retrying in {wait}s...")
+			time.sleep(wait)
 
 prompt_template = PromptTemplate(
 	template = """

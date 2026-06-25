@@ -1,4 +1,5 @@
 import pandas as pd
+from src.retriever import features
 
 def mood_fit_score(row, intent: dict):
 	feature_score = []
@@ -33,7 +34,7 @@ def rank_songs(filtered_songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 	return ranked.head(playlist_length)
 
 if __name__ == "__main__":
-	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query, features
+	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query
 	from src.parser import parse_intent
 	print("Imports COMPLETED")
 	test_prompt = "Italiano playlist for when your plan has succeeded against your enemies"

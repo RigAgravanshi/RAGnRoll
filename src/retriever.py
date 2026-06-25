@@ -19,7 +19,20 @@ index = faiss.read_index(CFG['indexing']['faiss_index_path'])
 print("[RETRIEVER] FAISS loaded")
 metadata = pd.read_parquet(CFG['data']['metadata_path'])
 print("[RETRIEVER] metadata loaded")
-model = SentenceTransformer(CFG['indexing']['model_name'], model_kwargs={"token": os.getenv("HF_KEY")})
+
+_model = None
+
+def _get_model() -> SentenceTransformer:
+	global _model
+	if _model is None:
+		print("[RETRIEVER] loading model...")
+		_model = SentenceTransformer(
+			CFG['indexing']['model_name'],
+			device="cpu",
+			model_kwargs={"token": os.getenv("HF_KEY")},
+		)
+		print("[RETRIEVER] model loaded")
+	return _model
 
 HARD_FILTERS = ['valence', 'energy']
 SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
@@ -29,7 +42,7 @@ def retrieve(query: str, k:int = 200) -> pd.DataFrame:
 	# BGE model requires prefix to signal it to work with the prompt
 	prefixed = "Represent this sentence for searching relevant passages: " + query
 
-	encoded_prompt = model.encode(prefixed)		      	# (384, )
+	encoded_prompt = _get_model().encode(prefixed)		      	# (384, )
 	encoded_prompt = encoded_prompt.reshape(1, -1) 		# (1,384)
 	faiss.normalize_L2(encoded_prompt)
 	distances, indices = index.search(encoded_prompt, k)
@@ -53,7 +66,7 @@ def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 		filtered = filtered[filtered[feature].between(max(0.0, low - margin), min(1.0, high + margin))]
 		print(f"[HARD] {feature} [{max(0.0, low - margin):.2f}, {min(1.0, high + margin):.2f}]: {before} -> {len(filtered)}")
 
-    # Fallback: if still too few, return everything
+    # Fallback: if too few, return everything
 	if len(filtered) < playlist_length:
 		print(f"[WARN] {len(filtered)} after hard filter. Returning full pool.")
 		return songs
@@ -84,7 +97,7 @@ def rebuild_retrieval_query(intent: dict) -> str:
 
 if __name__ == "__main__":
 	from src.parser import parse_intent
-	test_prompt =  "Suggest songs that would fit a cyberpunk movie set in India"
+	test_prompt =  "Suggest love songs fitting a techno-funk party" # a very contradicting prompt
 	intent_dict = parse_intent(test_prompt)
 	query = rebuild_retrieval_query(intent_dict)
 	results = retrieve(query, k=1000)

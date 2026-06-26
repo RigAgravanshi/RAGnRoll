@@ -80,7 +80,6 @@ if __name__ == "__main__":
 
 	print(f"Ranked pool size: {len(ranked)}")
 	print(f"After dedup: {len(dedup_df)}")
-	#print(dedup_df[['track_name', 'norm_name', 'final_score']].head(20))
 
 	final_result = apply_mmr(dedup_df, intent, lambda_param = 0.7)
 	

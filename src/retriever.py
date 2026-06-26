@@ -35,7 +35,7 @@ def _get_model() -> SentenceTransformer:
 	return _model
 
 HARD_FILTERS = ['valence', 'energy']
-SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
+# SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
 features = ['energy', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'danceability']
 
 def retrieve(query: str, k:int = 200) -> pd.DataFrame:
@@ -91,13 +91,14 @@ def rebuild_retrieval_query(intent: dict) -> str:
             mid = (low + high) / 2
             parts.append(f"{_label(mid)} {f}")
     parts += intent.get("moods", [])
+    parts += intent.get("genres", [])										# GENRE ADDED
     # parts += intent.get("activities", [])
     return " ".join(parts)
 
 
 if __name__ == "__main__":
 	from src.parser import parse_intent
-	test_prompt =  "Suggest love songs fitting a techno-funk party" # a very contradicting prompt
+	test_prompt =  "Suggest love songs for a techno-funk party"		# a very contradicting prompt
 	intent_dict = parse_intent(test_prompt)
 	query = rebuild_retrieval_query(intent_dict)
 	results = retrieve(query, k=1000)
@@ -105,7 +106,7 @@ if __name__ == "__main__":
 
 	print(intent_dict)
 	print(f"[QUERY] {query}")
-	print(filtered[['track_name', 'artist_name', 'energy', 'valence', 'similarity_score']].sort_values(by="similarity_score", ascending=False))
+	print(filtered[['track_name', 'artist_name', 'genre', 'energy', 'valence', 'similarity_score']].sort_values(by="similarity_score", ascending=False))
 	print(f"Songs: {len(results)} --> Filtered: {len(filtered)}")
 
 	print(f"\n\nTime taken: {time.time()-start} \n\n")

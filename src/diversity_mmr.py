@@ -1,5 +1,9 @@
 import pandas as pd
-import re 
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+import re
+
+features = ['energy', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'danceability']
 
 def _normalize_name(name: str) -> str:  # _ used in func name bcoz: its a pvt. helper, naming convention
 	name = name.lower()
@@ -20,13 +24,48 @@ def deduplicate_by_name(songs: pd.DataFrame) -> pd.DataFrame:
 	# groupby().first(): as_index=False + first() keeps all columns, takes first row per group(highest final_score after sort).
 	return songs_df.sort_values("final_score", ascending=False).reset_index(drop=True)
 
+def apply_mmr(songs: pd.DataFrame, intent: dict, lambda_param: float = 0.7) -> pd.DataFrame:
+    playlist_length = intent.get('playlist_length', 15)
+    candidates = songs.reset_index(drop=True)
+
+    selected_indices = []
+    remaining_indices = list(candidates.index)
+    
+    # Step 1: seed with highest final_score unconditionally
+    first_idx = candidates['final_score'].idxmax()
+    selected_indices.append(first_idx)
+    remaining_indices.remove(first_idx)
+    
+    # Step 2: iteratively pick best MMR candidate
+    while len(selected_indices) < playlist_length and remaining_indices:
+        selected_vecs = candidates.loc[selected_indices, features].values
+        
+        best_idx = None
+        best_score = -np.inf
+        
+        for idx in remaining_indices:
+            candidate_vec = candidates.loc[idx, features].values.reshape(1, -1)
+            sims = cosine_similarity(candidate_vec, selected_vecs)
+            max_sim = sims.max()
+            
+            mmr_score = lambda_param * candidates.loc[idx, 'final_score'] - (1 - lambda_param) * max_sim
+            
+            if mmr_score > best_score:
+                best_score = mmr_score
+                best_idx = idx
+        
+        selected_indices.append(best_idx)
+        remaining_indices.remove(best_idx)
+    
+    return candidates.loc[selected_indices].reset_index(drop=True)
+
+
 if __name__ == "__main__":
 	from src.ranker import rank_songs
-	print("RANKER IMPORTED")
 	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query
 	from src.parser import parse_intent
 	print("Imports COMPLETED")
-	test_prompt = "Suggest love songs fitting a techno-funk party"
+	test_prompt =  "A classy, slow Italian playlist with mafia-vibes for deep thinking"
 	intent = parse_intent(test_prompt)
 	print("PARSER.PY DONE")
 	query = rebuild_retrieval_query(intent)
@@ -34,11 +73,18 @@ if __name__ == "__main__":
 	results = retrieve(query, k=1000)
 	print("RETRIEVAL DONE")
 	filtered = filter_songs(results, intent)
-	print("\nFILTERING ALSO DONE!! Now Ranking......\n")
+	print("FILTERING ALSO DONE!! Now Ranking......")
 	ranked = rank_songs(filtered, intent)
 	print("Ranking of Kings DONE")
 	dedup_df = deduplicate_by_name(ranked)
 
 	print(f"Ranked pool size: {len(ranked)}")
 	print(f"After dedup: {len(dedup_df)}")
-	print(dedup_df[['track_name', 'norm_name', 'final_score']].head(20))
+	#print(dedup_df[['track_name', 'norm_name', 'final_score']].head(20))
+
+	final_result = apply_mmr(dedup_df, intent, lambda_param = 0.7)
+	
+	print("=== BEFORE MMR ===")
+	print(ranked[['track_name', 'final_score']].to_string())
+	print("\n=== AFTER MMR ===")
+	print(final_result[['track_name', 'final_score']].to_string())

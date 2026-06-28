@@ -6,16 +6,17 @@ def evaluate_playlist(df: pd.DataFrame, intent: dict) -> dict :
 	metrics = {}
 	df = df.copy()
 
-	metrics["avg_mood_fit"] = round(df["mood_score"].mean(), 3)
-	metrics["avg_semantic_match"] = round(df["normalized_similarity"].mean(), 3)
+# Do we even need an AVERAGE score of the 2 below values?
+	# metrics["avg_mood_fit"] = round(df["mood_score"].mean(), 2)
+	# metrics["avg_semantic_match"] = round(df["normalized_similarity"].mean(), 2)
 
 	for feat in features:
-		metrics[f"avg_{feat}"] = round(df[feat].mean(), 3)
+		metrics[f"avg_{feat}"] = round(df[feat].mean(), 2)
 
 	metrics["unique_artists"] = df["artist_name"].nunique()
 	metrics["unique_genres"] = df["genre"].nunique()
-	metrics["artist_diversity"] = round(df["artist_name"].nunique() / total, 3)
-	#metrics["genre_diversity"]  = round(df["genre"].nunique() / total, 3)
+	#metrics["artist_diversity"] = round(df["artist_name"].nunique() / total, 2)
+	# metrics["genre_diversity"]  = round(df["genre"].nunique() / total, 2)
 
 	return metrics
 

@@ -31,12 +31,12 @@ def apply_mmr(songs: pd.DataFrame, intent: dict, lambda_param: float = 0.7) -> p
     selected_indices = []
     remaining_indices = list(candidates.index)
     
-    # Step 1: seed with highest final_score unconditionally
+    # seed with highest final_score unconditionally
     first_idx = candidates['final_score'].idxmax()
     selected_indices.append(first_idx)
     remaining_indices.remove(first_idx)
     
-    # Step 2: iteratively pick best MMR candidate
+    # iteratively pick best MMR candidate
     while len(selected_indices) < playlist_length and remaining_indices:
         selected_vecs = candidates.loc[selected_indices, features].values
         
@@ -65,12 +65,12 @@ if __name__ == "__main__":
 	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query
 	from src.parser import parse_intent
 	print("Imports COMPLETED")
-	test_prompt =  "A classy, slow Italian playlist with mafia-vibes for deep thinking"
+	test_prompt = "I want songs for a late-night train journey after a difficult breakup."
 	intent = parse_intent(test_prompt)
 	print("PARSER.PY DONE")
 	query = rebuild_retrieval_query(intent)
 	print("QUERY REBUILT DONE")
-	results = retrieve(query, k=1000)
+	results = retrieve(query, k=1500)
 	print("RETRIEVAL DONE")
 	filtered = filter_songs(results, intent)
 	print("FILTERING ALSO DONE!! Now Ranking......")
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
 	final_result = apply_mmr(dedup_df, intent, lambda_param = 0.7)
 	
-	print("=== BEFORE MMR ===")
-	print(ranked[['track_name', 'final_score']].to_string())
+	# print("=== BEFORE MMR ===")
+	# print(ranked[['track_name', 'final_score']].to_string())
 	print("\n=== AFTER MMR ===")
-	print(final_result[['track_name', 'final_score']].to_string())
+	print(final_result[['track_name', 'artist_name', 'genre', 'mood_score', 'normalized_similarity']].to_string())

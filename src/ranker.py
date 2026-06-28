@@ -1,4 +1,5 @@
 import pandas as pd
+from src.config_loader import CFG
 from src.retriever import features
 
 def mood_fit_score(row, intent: dict):
@@ -24,15 +25,13 @@ def score_normalization(similarity_score: pd.Series) -> pd.Series:
 	return (similarity_score - min_val) / (max_val - min_val)
 
 def rank_songs(filtered_songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
-	playlist_length = intent.get("playlist_length", 15)
 	ranked = filtered_songs.copy()
 	ranked["mood_score"] = ranked.apply(lambda row: mood_fit_score(row, intent), axis=1)
 	ranked["normalized_similarity"] = score_normalization(ranked["similarity_score"])
-	ranked["final_score"] = 0.5 * ranked["mood_score"] + 0.5 * ranked["normalized_similarity"]
+	ranked["final_score"] = CFG["ranking"]["mood_score_weight"]*ranked["mood_score"] + CFG["ranking"]["similarity_weight"]*ranked["normalized_similarity"]
 
 	ranked = ranked.sort_values(by="final_score", ascending=False)
-	return ranked.head(playlist_length)
-
+	return ranked														
 if __name__ == "__main__":
 	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query
 	from src.parser import parse_intent

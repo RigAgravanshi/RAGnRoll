@@ -1,5 +1,5 @@
 import pandas as pd
-from config_loader import CFG
+from src.config_loader import CFG
 from langchain_ollama import OllamaLLM
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 	from src.parser import parse_intent
 
 	print("Imports COMPLETED")
-	test_prompt =  "A classy, slow Italian playlist with mafia-vibes for deep thinking"
+	test_prompt = "A classy, slow Italian playlist with mafia-vibes for deep thinking"
 	intent = parse_intent(test_prompt)
 	print("PARSER.PY DONE")
 	query = rebuild_retrieval_query(intent)
@@ -76,4 +76,4 @@ if __name__ == "__main__":
 	final_result = apply_mmr(dedup_df, intent, lambda_param = 0.7)
 
 	PLAYLIST = explain_playlist(final_result, intent)
-	print(PLAYLIST[["track_name", "artist_name", "final_score", "explanation"]].to_string())
+	print(PLAYLIST[["track_name", "artist_name", "genre", "explanation"]].to_string())

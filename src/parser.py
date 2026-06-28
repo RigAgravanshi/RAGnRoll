@@ -6,6 +6,8 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from ollama import ResponseError
 from src.config_loader import CFG
+from src.logger import get_logger
+logger = get_logger(__name__)
 
 _OLLAMA_RETRY_ERRORS = (ResponseError, httpx.ConnectError, ConnectionError)
 
@@ -19,7 +21,7 @@ def parse_intent(user_prompt: str, max_retries: int = 3) -> dict:
 			if attempt == max_retries:
 				raise
 			wait = 2 * attempt
-			print(f"[PARSER] Ollama error (attempt {attempt}/{max_retries}): {e}. Retrying in {wait}s...")
+			logger.error(f"Ollama error (attempt {attempt}/{max_retries}): {e}. Retrying in {wait}s...")
 			time.sleep(wait)
 
 prompt_template = PromptTemplate(
@@ -155,6 +157,7 @@ if __name__ == "__main__":
 	example2 = "A classical music playlist to lock-in when u r on a deadline"
 	example3 = "Suggest songs that would fit a cyberpunk movie set in India"
 	example4 = "I want songs for a late-night train journey after a difficult breakup."
-	user_prompt = example1
+	example5 = "ominous music like where u r a spy who is on an important missions"
+	user_prompt = example5
 	result = parse_intent(user_prompt)
 	print(result)

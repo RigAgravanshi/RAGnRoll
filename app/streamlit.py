@@ -28,7 +28,7 @@ user_prompt = st.text_area(
 		These are extracted from the Natural Language of your prompt by an LLM
 		"""
 		)
-playlist_length = st.slider(label = "Playlist Length", min_value=5, max_value = 30, step = 1, value = 10)
+playlist_length = st.slider(label = "Playlist Length", min_value=5, max_value = 20, step = 1, value = 10)
 
 # Session initialization and Playlist generation: 
 for key in ["playlist", "metrics"]:

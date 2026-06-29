@@ -11,4 +11,9 @@ indexing:
   embedding_dim: 384
 
 retrieval:
-  llm_model: "qwen2.5:7b"
+  llm_model: "llama-3.1-8b-instant"
+  llm_temperature: 0.0
+
+ranking:
+  mood_score_weight: 0.8
+  similarity_weight: 0.2

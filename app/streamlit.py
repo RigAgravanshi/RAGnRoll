@@ -10,19 +10,11 @@ try:																			# Pls Don't disturb import order. Otherwise Expect Crashe
 	from src.explainer import explain_playlist
 	from src.diversity_mmr import deduplicate_by_name, apply_mmr
 	from src.ranker import rank_songs
-	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query, load_artifacts, _get_model
+	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query
 	from src.parser import parse_intent
 except ImportError as e:
 	st.error(f"Failed to Import Modules {e}", icon="🚨")
 	st.stop()
-
-@st.cache_resource
-def _warm_artifacts():
-	return load_artifacts()
-@st.cache_resource
-def _warm_model():
-	return _get_model()
-
 
 user_prompt = st.text_area(
 		label="Enter what You Feel~~",
@@ -39,7 +31,7 @@ user_prompt = st.text_area(
 playlist_length = st.slider(label = "Playlist Length", min_value=5, max_value = 20, step = 1, value = 10)
 
 # Session initialization and Playlist generation: 
-for key in ["playlist", "metrics"]:
+for key in ["playlist", "metrics", "explanation"]:
 	if key not in st.session_state:
 		st.session_state[key] = None
 
@@ -55,8 +47,6 @@ if st.button("Generate Playlist 🎵"):
 				query = rebuild_retrieval_query(intent)
 
 			with st.spinner("Retrieving Songs from Database"):
-				_warm_artifacts()
-				_warm_model()
 				results = retrieve(query)
 				filtered = filter_songs(results, intent)
 
@@ -65,11 +55,12 @@ if st.button("Generate Playlist 🎵"):
 				dedup_df = deduplicate_by_name(ranked)
 				final_result = apply_mmr(dedup_df, intent)
 
-			with st.spinner("Generating explanations..."):
-				PLAYLIST = explain_playlist(final_result, intent)
-				metrics = evaluate_playlist(PLAYLIST, intent)
+			with st.spinner("Generating explanation..."):
+				explanation = explain_playlist(final_result, intent)
+				metrics = evaluate_playlist(final_result, intent)
 
-			st.session_state["playlist"] = PLAYLIST
+			st.session_state["playlist"] = final_result
+			st.session_state["explanation"] = explanation
 			st.session_state["metrics"] = metrics
 		
 		except Exception as e:
@@ -80,20 +71,24 @@ if st.button("Generate Playlist 🎵"):
 if st.session_state["playlist"] is not None:
 	df = st.session_state["playlist"]
 	metrics = st.session_state["metrics"]
+	explanation = st.session_state["explanation"]
 	display_df = df.copy()
 
+	st.markdown("### Why this playlist?")
+	st.info(explanation)
+
 	st.subheader("Playlist Songs")
-	display_cols = ["track_name", "artist_name", "genre", "final_score", "explanation"]
+	display_cols = ["track_name", "artist_name", "genre", "final_score"]
 	st.dataframe(
-		display_df[display_cols], 
+		display_df[display_cols],
 		hide_index=True, width='stretch',
 		height=500,
 		column_config={
-			"final_score" : st.column_config.NumberColumn("Score", format="%.2f", 
-				help = "Final score, calculated as Weighted Avg. of Mood-Fit-score and Semantic-Similarity(cosine)"),
-			"explanation" : st.column_config.TextColumn("Why", width = "large",
-				help = "Generated as per audio features, moods and activities that best match your prompt")
-		}
+			"final_score": st.column_config.NumberColumn(
+				"Score", format="%.2f",
+				help="Final score, calculated as Weighted Avg. of Mood-Fit-score and Semantic-Similarity(cosine)",
+			),
+		},
 	)
 
 	st.divider()

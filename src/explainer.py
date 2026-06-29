@@ -11,57 +11,42 @@ load_dotenv()
 
 prompt = PromptTemplate(
 	template="""
-	You are explaining why a song was selected for a playlist.
+	You are explaining why a playlist was generated for a user.
 
-	User intent: moods={moods}, activities={activities}
-	Song: "{track_name}" by {artist_name} ({genre})
-	Audio features: energy={energy}, valence={valence}, acousticness={acousticness}, instrumentalness={instrumentalness}, speechiness={speechiness}
-	Mood fit: {mood_score} | Semantic match: {normalized_similarity} | Final_score : {final_score}
+	User intent: moods={moods}, activities={activities}, avoid={avoid}
+	Playlist contains {playlist_length} songs across these genres: {genres}
+	Average audio features: energy={energy}, valence={valence}, acousticness={acousticness}
 
-	Write exactly ONE sentence (max 20 words) explaining why this song fits the intent.
-	Use the actual feature values. No fluff. No preamble. Just the sentence
+	Write 2-3 sentences explaining how this playlist fits the user's intent.
+	Be specific, with convincing reasoning. Reference the moods, energy level, and genre mix. No fluff.
 	""",
-	input_variables= [
-        "track_name", "artist_name", "genre", "moods", "activities",
-        "energy", "valence", "acousticness", "instrumentalness", "speechiness",
-        "mood_score", "normalized_similarity", "final_score"
-    	]
+	input_variables=[
+		"moods", "activities", "avoid", "playlist_length",
+		"genres", "energy", "valence", "acousticness",
+	],
 )
 
 llm = ChatGroq(
-    model=CFG['retrieval']['llm_model'],
-    temperature=CFG['retrieval']['llm_temperature'],
-    api_key=os.getenv("GROQ_API_KEY")
+	model=CFG['retrieval']['llm_model'],
+	temperature=CFG['retrieval']['llm_temperature'],
+	api_key=os.getenv("GROQ_API_KEY"),
 )
 chain = prompt | llm | StrOutputParser()
-def _explain_song(row: pd.Series, intent: dict) -> str:
-#	llm = OllamaLLM(model=CFG['retrieval']['llm_model'], temperature=CFG['retrieval']['llm_temperature'])
-#	chain = prompt | llm | StrOutputParser()
 
+def explain_playlist(final_result: pd.DataFrame, intent: dict) -> str:
 	try:
 		return chain.invoke({
-			"track_name":        row["track_name"],
-            "artist_name":       row["artist_name"],
-            "genre":             row.get("genre", "unknown"),
-            "moods":             ", ".join(intent.get("moods", [])),
-            "activities":        ", ".join(intent.get("activities", [])),
-            "energy":            round(float(row["energy"]), 2),
-            "valence":           round(float(row["valence"]), 2),
-            "acousticness":      round(float(row["acousticness"]), 2),
-            "instrumentalness":  round(float(row["instrumentalness"]), 2),
-            "speechiness":       round(float(row["speechiness"]), 2),
-            "mood_score":    	 round(float(row["mood_score"]), 2),
-            "normalized_similarity":   round(float(row["normalized_similarity"]), 2),
-			"final_score":   	 round(float(row["final_score"]), 2)
-        })
+			"moods": ", ".join(intent.get("moods", [])),
+			"activities": ", ".join(intent.get("activities", [])),
+			"avoid": ", ".join(intent.get("avoid", [])),
+			"playlist_length": len(final_result),
+			"genres": ", ".join(final_result["genre"].value_counts().head(5).index.tolist()),
+			"energy": round(final_result["energy"].mean(), 2),
+			"valence": round(final_result["valence"].mean(), 2),
+			"acousticness": round(final_result["acousticness"].mean(), 2),
+		})
 	except Exception as e:
 		return f"Explanation unavailable: {e}"
-
-def explain_playlist(final_result: pd.DataFrame, intent: dict) -> pd.DataFrame:
-	# add a 0.5s timer between each LLM call to prevent Groq limit hits
-	df = final_result.copy()
-	df["explanation"] = df.apply(lambda row: _explain_song(row, intent), axis=1)
-	return df
 
 
 if __name__ == "__main__":
@@ -85,19 +70,8 @@ if __name__ == "__main__":
 	dedup_df = deduplicate_by_name(ranked)
 	print(f"Ranked pool size: {len(ranked)} --------> After dedup: {len(dedup_df)}")
 
-	final_result = apply_mmr(dedup_df, intent, lambda_param = 0.7)
+	final_result = apply_mmr(dedup_df, intent, lambda_param=0.7)
 
-	PLAYLIST = explain_playlist(final_result, intent)
-	print(PLAYLIST[["track_name", "artist_name", "genre", "explanation"]].to_string())
-
-
-    return _chain.invoke({
-        "moods":           ", ".join(intent.get("moods", [])),
-        "activities":      ", ".join(intent.get("activities", [])),
-        "avoid":           ", ".join(intent.get("avoid", [])),
-        "playlist_length": len(final_df),
-        "genres":          ", ".join(final_df["genre"].value_counts().head(5).index.tolist()),
-        "energy":          round(final_df["energy"].mean(), 2),
-        "valence":         round(final_df["valence"].mean(), 2),
-        "acousticness":    round(final_df["acousticness"].mean(), 2),
-    })
+	explanation = explain_playlist(final_result, intent)
+	print(explanation)
+	print(final_result[["track_name", "artist_name", "genre"]].to_string())

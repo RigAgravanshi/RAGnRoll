@@ -1,6 +1,7 @@
 import os
 import faiss
 import time
+import tempfile
 import pandas as pd
 import warnings
 warnings.filterwarnings("ignore")
@@ -16,29 +17,48 @@ load_dotenv()
 index = None
 metadata = None
 
-def load_artifacts():													# changes made to shift app to Hugging_Face Spaces
-    global index, metadata
-    if index is None or metadata is None:
-        logger.info("Downloading artifacts from HF Hub...")
-        index_path = hf_hub_download(
-            repo_id="ReagentGrignard/ragnroll-artifacts",
-            filename="faiss.index",
-            repo_type="dataset",
-            token=os.getenv("HF_KEY"),
-            cache_dir="/tmp/ragnroll"
-        )
-        meta_path = hf_hub_download(
-            repo_id="ReagentGrignard/ragnroll-artifacts",
-            filename="track_metadata.parquet",
-            repo_type="dataset",
-            token=os.getenv("HF_KEY"),
-            cache_dir="/tmp/ragnroll"
-        )
-        index = faiss.read_index(index_path)
-        logger.info("FAISS loaded")
-        metadata = pd.read_parquet(meta_path)
-        logger.info("metadata loaded")
-    return index, metadata
+METADATA_COLUMNS = [
+	"track_name", "artist_name", "genre", "popularity",
+	"energy", "valence", "acousticness", "instrumentalness",
+	"speechiness", "danceability",
+]
+def _artifact_cache_dir() -> str:
+	return os.path.join(tempfile.gettempdir(), "ragnroll")
+
+def load_artifacts():
+	global index, metadata
+	if index is None or metadata is None:
+		cache_dir = _artifact_cache_dir()
+		local_index = CFG['indexing']['faiss_index_path']
+		local_meta = CFG['data']['metadata_path']
+
+		if os.path.isfile(local_index) and os.path.isfile(local_meta):
+			logger.info("Loading artifacts from local paths...")
+			index = faiss.read_index(local_index)
+			logger.info("FAISS loaded (%d vectors)", index.ntotal)
+			metadata = pd.read_parquet(local_meta, columns=METADATA_COLUMNS)
+			logger.info("metadata loaded (%d rows)", len(metadata))
+		else:
+			logger.info("Downloading artifacts from HF Hub...")
+			index_path = hf_hub_download(
+				repo_id="ReagentGrignard/ragnroll-artifacts",
+				filename="faiss.index",
+				repo_type="dataset",
+				token=os.getenv("HF_KEY"),
+				cache_dir=cache_dir,
+			)
+			meta_path = hf_hub_download(
+				repo_id="ReagentGrignard/ragnroll-artifacts",
+				filename="track_metadata.parquet",
+				repo_type="dataset",
+				token=os.getenv("HF_KEY"),
+				cache_dir=cache_dir,
+			)
+			index = faiss.read_index(index_path)
+			logger.info("FAISS loaded (%d vectors)", index.ntotal)
+			metadata = pd.read_parquet(meta_path, columns=METADATA_COLUMNS)
+			logger.info("metadata loaded (%d rows)", len(metadata))
+	return index, metadata
 
 start = time.time()
 # index = faiss.read_index(CFG['indexing']['faiss_index_path'])
@@ -93,7 +113,7 @@ def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 		filtered = filtered[filtered[feature].between(max(0.0, low - margin), min(1.0, high + margin))]
 		logger.info(f"{feature} [{max(0.0, low - margin):.2f}, {min(1.0, high + margin):.2f}]: {before} -> {len(filtered)}")
 
-    # Fallback: if too few, return everything
+	# Fallback: if too few, return everything
 	if len(filtered) < playlist_length:
 		logger.warning(f"{len(filtered)} after hard filter. Returning full pool.")
 		return songs

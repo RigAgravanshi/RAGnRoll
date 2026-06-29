@@ -2,7 +2,6 @@ import pandas as pd
 from src.retriever import features
 
 def evaluate_playlist(df: pd.DataFrame, intent: dict) -> dict :
-	total = len(df)
 	metrics = {}
 	df = df.copy()
 

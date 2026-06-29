@@ -10,12 +10,41 @@ from sentence_transformers import SentenceTransformer
 from src.logger import get_logger
 logger = get_logger(__name__)
 
+from huggingface_hub import hf_hub_download
 load_dotenv()
+
+index = None
+metadata = None
+
+def load_artifacts():													# changes made to shift app to Hugging_Face Spaces
+    global index, metadata
+    if index is None or metadata is None:
+        logger.info("Downloading artifacts from HF Hub...")
+        index_path = hf_hub_download(
+            repo_id="ReagentGrignard/ragnroll-artifacts",
+            filename="faiss.index",
+            repo_type="dataset",
+            token=os.getenv("HF_KEY"),
+            cache_dir="/tmp/ragnroll"
+        )
+        meta_path = hf_hub_download(
+            repo_id="ReagentGrignard/ragnroll-artifacts",
+            filename="track_metadata.parquet",
+            repo_type="dataset",
+            token=os.getenv("HF_KEY"),
+            cache_dir="/tmp/ragnroll"
+        )
+        index = faiss.read_index(index_path)
+        logger.info("FAISS loaded")
+        metadata = pd.read_parquet(meta_path)
+        logger.info("metadata loaded")
+    return index, metadata
+
 start = time.time()
-index = faiss.read_index(CFG['indexing']['faiss_index_path'])
-logger.info("FAISS loaded")
-metadata = pd.read_parquet(CFG['data']['metadata_path'])
-logger.info("metadata loaded")
+# index = faiss.read_index(CFG['indexing']['faiss_index_path'])
+# logger.info("FAISS loaded")
+# metadata = pd.read_parquet(CFG['data']['metadata_path'])
+# logger.info("metadata loaded")
 
 _model = None
 
@@ -36,11 +65,12 @@ HARD_FILTERS = ['valence', 'energy']
 features = ['energy', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'danceability']
 
 def retrieve(query: str, k:int = 200) -> pd.DataFrame:
+	index, metadata = load_artifacts()
 	# BGE model requires prefix to signal it to work with the prompt
 	prefixed = "Represent this sentence for searching relevant passages: " + query
 
 	encoded_prompt = _get_model().encode(prefixed)		      	# (384, )
-	encoded_prompt = encoded_prompt.reshape(1, -1) 		# (1, 384)
+	encoded_prompt = encoded_prompt.reshape(1, -1) 				# (1, 384)
 	faiss.normalize_L2(encoded_prompt)
 	distances, indices = index.search(encoded_prompt, k)
 
@@ -65,10 +95,10 @@ def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 
     # Fallback: if too few, return everything
 	if len(filtered) < playlist_length:
-		print(f"[WARN] {len(filtered)} after hard filter. Returning full pool.")
+		logger.warning(f"{len(filtered)} after hard filter. Returning full pool.")
 		return songs
 
-	print(f"[INFO] {len(filtered)} songs pass hard filter. {playlist_length} is the playlist length.")
+	logger.info(f"{len(filtered)} songs pass hard filter. {playlist_length} is the playlist length.")
 	return filtered
 
 def _label(mid: float) -> str:

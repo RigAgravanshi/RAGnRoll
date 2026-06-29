@@ -1,14 +1,16 @@
 langchain 
-langchain-core 
-langchain-community 
+langchain-core
 langchain-ollama 
+langchain-groq
 langchain-huggingface 
 
 sentence-transformers
 faiss-cpu
 pyarrow
 e .
-python-dotenv 
+python-dotenv
+pyyaml
+httpx
 
 scikit-learn 
 numpy 
@@ -16,4 +18,5 @@ pandas
 transformers
 torch
 
+streamlit
 pydantic

@@ -1,8 +1,13 @@
+import os
 import pandas as pd
+from dotenv import load_dotenv
 from src.config_loader import CFG
-from langchain_ollama import OllamaLLM
+#from langchain_ollama import OllamaLLM
+from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+
+load_dotenv()
 
 prompt = PromptTemplate(
 	template="""
@@ -23,9 +28,15 @@ prompt = PromptTemplate(
     	]
 )
 
+llm = ChatGroq(
+    model=CFG['retrieval']['llm_model'],
+    temperature=CFG['retrieval']['llm_temperature'],
+    api_key=os.getenv("GROQ_API_KEY")
+)
+chain = prompt | llm | StrOutputParser()
 def _explain_song(row: pd.Series, intent: dict) -> str:
-	llm = OllamaLLM(model=CFG['retrieval']['llm_model'], temperature=CFG['retrieval']['llm_temperature'])
-	chain = prompt | llm | StrOutputParser()
+#	llm = OllamaLLM(model=CFG['retrieval']['llm_model'], temperature=CFG['retrieval']['llm_temperature'])
+#	chain = prompt | llm | StrOutputParser()
 
 	try:
 		return chain.invoke({
@@ -47,6 +58,7 @@ def _explain_song(row: pd.Series, intent: dict) -> str:
 		return f"Explanation unavailable: {e}"
 
 def explain_playlist(final_result: pd.DataFrame, intent: dict) -> pd.DataFrame:
+	# add a 0.5s timer between each LLM call to prevent Groq limit hits
 	df = final_result.copy()
 	df["explanation"] = df.apply(lambda row: _explain_song(row, intent), axis=1)
 	return df

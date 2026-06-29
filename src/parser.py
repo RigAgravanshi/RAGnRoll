@@ -1,28 +1,47 @@
 import time
-
-import httpx
-from langchain_ollama import OllamaLLM
+import os
+# import httpx
+# from langchain_ollama import OllamaLLM
+# from ollama import ResponseError
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
-from ollama import ResponseError
 from src.config_loader import CFG
 from src.logger import get_logger
 logger = get_logger(__name__)
 
-_OLLAMA_RETRY_ERRORS = (ResponseError, httpx.ConnectError, ConnectionError)
+load_dotenv()
+
+# _OLLAMA_RETRY_ERRORS = (ResponseError, httpx.ConnectError, ConnectionError)
 
 def parse_intent(user_prompt: str, max_retries: int = 3) -> dict:
-	llm = OllamaLLM(model=CFG['retrieval']['llm_model'], temperature=CFG['retrieval']['llm_temperature'])
-	chain = prompt_template | llm | JsonOutputParser()
-	for attempt in range(1, max_retries + 1):
-		try:
-			return chain.invoke({'user_prompt': user_prompt})
-		except _OLLAMA_RETRY_ERRORS as e:
-			if attempt == max_retries:
-				raise
-			wait = 2 * attempt
-			logger.error(f"Ollama error (attempt {attempt}/{max_retries}): {e}. Retrying in {wait}s...")
-			time.sleep(wait)
+	# llm = OllamaLLM(model=CFG['retrieval']['llm_model'], temperature=CFG['retrieval']['llm_temperature'])
+	# chain = prompt_template | llm | JsonOutputParser()
+	# for attempt in range(1, max_retries + 1):
+	# 	try:
+	# 		return chain.invoke({'user_prompt': user_prompt})
+	# 	except _OLLAMA_RETRY_ERRORS as e:
+	# 		if attempt == max_retries:
+	# 			raise
+	# 		wait = 2 * attempt
+	# 		logger.error(f"Ollama error (attempt {attempt}/{max_retries}): {e}. Retrying in {wait}s...")
+	# 		time.sleep(wait)
+    llm = ChatGroq(
+        model=CFG['retrieval']['llm_model'],
+        temperature=CFG['retrieval']['llm_temperature'],
+        api_key=os.getenv("GROQ_API_KEY")
+    )
+    chain = prompt_template | llm | JsonOutputParser()
+    for attempt in range(1, max_retries + 1):
+        try:
+            return chain.invoke({'user_prompt': user_prompt})
+        except Exception as e:
+            if attempt == max_retries:
+                raise
+            wait = 2 * attempt
+            logger.error(f"Groq error (attempt {attempt}/{max_retries}): {e}. Retrying in {wait}s...")
+            time.sleep(wait)
 
 prompt_template = PromptTemplate(
 	template = """

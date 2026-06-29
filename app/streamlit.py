@@ -10,15 +10,23 @@ try:																			# Pls Don't disturb import order. Otherwise Expect Crashe
 	from src.explainer import explain_playlist
 	from src.diversity_mmr import deduplicate_by_name, apply_mmr
 	from src.ranker import rank_songs
-	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query
+	from src.retriever import retrieve, filter_songs, rebuild_retrieval_query, load_artifacts, _get_model
 	from src.parser import parse_intent
 except ImportError as e:
 	st.error(f"Failed to Import Modules {e}", icon="🚨")
 	st.stop()
 
+@st.cache_resource
+def _warm_artifacts():
+	return load_artifacts()
+@st.cache_resource
+def _warm_model():
+	return _get_model()
+
 
 user_prompt = st.text_area(
-		label="Enter what You Feel~~", 
+		label="Enter what You Feel~~",
+		height=100,
 		placeholder="e.g. Suggest songs that would fit a cyberpunk movie set in India", 
 		help = """
 		Describe a Mood/ an Activity/ a Time but don't be vague. 
@@ -47,6 +55,8 @@ if st.button("Generate Playlist 🎵"):
 				query = rebuild_retrieval_query(intent)
 
 			with st.spinner("Retrieving Songs from Database"):
+				_warm_artifacts()
+				_warm_model()
 				results = retrieve(query)
 				filtered = filter_songs(results, intent)
 

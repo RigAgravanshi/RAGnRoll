@@ -89,3 +89,15 @@ if __name__ == "__main__":
 
 	PLAYLIST = explain_playlist(final_result, intent)
 	print(PLAYLIST[["track_name", "artist_name", "genre", "explanation"]].to_string())
+
+
+    return _chain.invoke({
+        "moods":           ", ".join(intent.get("moods", [])),
+        "activities":      ", ".join(intent.get("activities", [])),
+        "avoid":           ", ".join(intent.get("avoid", [])),
+        "playlist_length": len(final_df),
+        "genres":          ", ".join(final_df["genre"].value_counts().head(5).index.tolist()),
+        "energy":          round(final_df["energy"].mean(), 2),
+        "valence":         round(final_df["valence"].mean(), 2),
+        "acousticness":    round(final_df["acousticness"].mean(), 2),
+    })

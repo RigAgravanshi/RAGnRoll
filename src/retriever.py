@@ -87,7 +87,7 @@ def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 		if feature not in intent:
 			continue
 		low, high = intent[feature]
-        # expand bounds by 20% to avoid over-filtering. Major problem was occuring here
+		# expand bounds by 20% to avoid over-filtering. Major problem was occuring here
 		margin = (high - low) * 0.2
 		before = len(filtered)
 		filtered = filtered[filtered[feature].between(max(0.0, low - margin), min(1.0, high + margin))]

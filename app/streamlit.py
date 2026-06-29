@@ -59,7 +59,10 @@ if st.button("Generate Playlist 🎵"):
 				explanation = explain_playlist(final_result, intent)
 				metrics = evaluate_playlist(final_result, intent)
 
-			st.session_state["playlist"] = final_result
+			st.session_state["playlist"] = final_result[
+				["track_name", "artist_name", "genre", "final_score",
+				 "energy", "valence", "acousticness", "instrumentalness", "speechiness", "danceability"]
+			].copy()
 			st.session_state["explanation"] = explanation
 			st.session_state["metrics"] = metrics
 		
@@ -72,7 +75,6 @@ if st.session_state["playlist"] is not None:
 	df = st.session_state["playlist"]
 	metrics = st.session_state["metrics"]
 	explanation = st.session_state["explanation"]
-	display_df = df.copy()
 
 	st.markdown("### Why this playlist?")
 	st.info(explanation)
@@ -80,7 +82,7 @@ if st.session_state["playlist"] is not None:
 	st.subheader("Playlist Songs")
 	display_cols = ["track_name", "artist_name", "genre", "final_score"]
 	st.dataframe(
-		display_df[display_cols],
+		df[display_cols],
 		hide_index=True, width='stretch',
 		height=500,
 		column_config={

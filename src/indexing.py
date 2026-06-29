@@ -40,26 +40,47 @@ def faiss_index(embeddings, CFG):
 
 def save_metadata(df, CFG):
 	df.to_parquet(CFG['data']['metadata_path'])
+	slim_path = CFG['data'].get('metadata_slim_path')
+	if not slim_path:
+		return
+	slim_cols = [
+		'track_name', 'artist_name', 'genre', 'popularity',
+		'energy', 'valence', 'acousticness', 'instrumentalness',
+		'speechiness', 'danceability',
+	]
+	slim = df[slim_cols].copy()
+	slim['genre'] = slim['genre'].astype('category')
+	slim['popularity'] = pd.to_numeric(slim['popularity'], downcast='integer')
+	for col in slim_cols[4:]:
+		slim[col] = slim[col].astype('float32')
+	os.makedirs(os.path.dirname(slim_path), exist_ok=True)
+	slim.to_parquet(slim_path, compression='zstd', index=False)
 
-device = "cuda" if torch.cuda.is_available() else "cpu" 
- 
-# Load_song_text
-texts, df = load_song_text(CFG['data']['processed_path'])
 
-# generate embeddings
-embeddings = generate_embeddings(texts, CFG, device)
-# print(embeddings.shape)
-# print(embeddings.dtype)
+def build_slim_metadata():
+	"""Build track_metadata_slim.parquet from existing full metadata only."""
+	meta_path = CFG['data']['metadata_path']
+	if not os.path.isfile(meta_path):
+		raise FileNotFoundError(f"Full metadata not found: {meta_path}")
+	df = pd.read_parquet(meta_path)
+	save_metadata(df, CFG)
+	print(f"Wrote slim metadata to {CFG['data']['metadata_slim_path']}")
 
-# Vector store creation and storage:
-# load embeddings from memory (prevent in-place normalization in faiss_index() of og embeddings)
-embeddings_load = np.load(CFG['indexing']['embeddings_path'])
-embs = embeddings_load.copy()
-index = faiss_index(embs, CFG)
-# print(index.ntotal)
 
-# saving df for metadata 
-save_metadata(df, CFG)
-meta = pd.read_parquet(CFG['data']['metadata_path'])
-# print(meta.shape)
-# print(meta.columns.tolist())
+def run_full_index():
+	texts, df = load_song_text(CFG['data']['processed_path'])
+	generate_embeddings(texts, CFG, device)
+	embeddings_load = np.load(CFG['indexing']['embeddings_path'])
+	embs = embeddings_load.copy()
+	faiss_index(embs, CFG)
+	save_metadata(df, CFG)
+
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+if __name__ == "__main__":
+	import sys
+	if len(sys.argv) > 1 and sys.argv[1] == "--slim-only":
+		build_slim_metadata()
+	else:
+		run_full_index()

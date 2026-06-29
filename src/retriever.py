@@ -1,4 +1,5 @@
 import os
+import gc
 import faiss
 import time
 import tempfile
@@ -7,7 +8,6 @@ import warnings
 warnings.filterwarnings("ignore")
 from dotenv import load_dotenv
 from src.config_loader import CFG
-from sentence_transformers import SentenceTransformer
 from src.logger import get_logger
 logger = get_logger(__name__)
 
@@ -17,74 +17,115 @@ load_dotenv()
 index = None
 metadata = None
 
-METADATA_COLUMNS = [
-	"track_name", "artist_name", "genre", "popularity",
-	"energy", "valence", "acousticness", "instrumentalness",
-	"speechiness", "danceability",
-]
+features = ["energy", "valence", "acousticness", "instrumentalness", "speechiness", "danceability"]
+METADATA_COLUMNS = ["track_name", "artist_name", "genre", "popularity", *features]
+HF_REPO = "ReagentGrignard/ragnroll-artifacts"
+_FAISS_MMAP_FLAGS = faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY
+
+
 def _artifact_cache_dir() -> str:
 	return os.path.join(tempfile.gettempdir(), "ragnroll")
 
+
+def _read_faiss_index(path: str):
+	try:
+		idx = faiss.read_index(path, _FAISS_MMAP_FLAGS)
+		logger.info("FAISS loaded with mmap (%d vectors)", idx.ntotal)
+		return idx
+	except Exception as exc:
+		logger.warning("FAISS mmap unavailable (%s); loading into RAM", exc)
+		idx = faiss.read_index(path)
+		logger.info("FAISS loaded (%d vectors)", idx.ntotal)
+		return idx
+
+
+def _compact_metadata(df: pd.DataFrame) -> pd.DataFrame:
+	df = df[METADATA_COLUMNS].copy()
+	df["genre"] = df["genre"].astype("category")
+	for col in features:
+		df[col] = df[col].astype("float32")
+	df["popularity"] = pd.to_numeric(df["popularity"], downcast="integer")
+	return df
+
+
+def _read_metadata(path: str) -> pd.DataFrame:
+	logger.info("Loading metadata from %s", os.path.basename(path))
+	df = pd.read_parquet(path, columns=METADATA_COLUMNS, engine="pyarrow")
+	df = _compact_metadata(df)
+	logger.info("metadata loaded (%d rows)", len(df))
+	return df
+
+
+def _resolve_metadata_path(cache_dir: str) -> str:
+	local_slim = CFG["data"].get("metadata_slim_path", "")
+	local_full = CFG["data"]["metadata_path"]
+	if local_slim and os.path.isfile(local_slim):
+		return local_slim
+	if os.path.isfile(local_full):
+		return local_full
+
+	for filename in ("track_metadata_slim.parquet", "track_metadata.parquet"):
+		try:
+			return hf_hub_download(
+				repo_id=HF_REPO,
+				filename=filename,
+				repo_type="dataset",
+				token=os.getenv("HF_KEY"),
+				cache_dir=cache_dir,
+			)
+		except Exception as exc:
+			logger.warning("HF metadata file %s unavailable: %s", filename, exc)
+	raise FileNotFoundError("No metadata parquet found locally or on Hugging Face Hub")
+
+
+def _resolve_index_path(cache_dir: str) -> str:
+	local_index = CFG["indexing"]["faiss_index_path"]
+	if os.path.isfile(local_index):
+		return local_index
+	return hf_hub_download(
+		repo_id=HF_REPO,
+		filename="faiss.index",
+		repo_type="dataset",
+		token=os.getenv("HF_KEY"),
+		cache_dir=cache_dir,
+	)
+
+
 def load_artifacts():
 	global index, metadata
-	if index is None or metadata is None:
-		cache_dir = _artifact_cache_dir()
-		local_index = CFG['indexing']['faiss_index_path']
-		local_meta = CFG['data']['metadata_path']
+	if index is not None and metadata is not None:
+		return index, metadata
 
-		if os.path.isfile(local_index) and os.path.isfile(local_meta):
-			logger.info("Loading artifacts from local paths...")
-			index = faiss.read_index(local_index)
-			logger.info("FAISS loaded (%d vectors)", index.ntotal)
-			metadata = pd.read_parquet(local_meta, columns=METADATA_COLUMNS)
-			logger.info("metadata loaded (%d rows)", len(metadata))
-		else:
-			logger.info("Downloading artifacts from HF Hub...")
-			index_path = hf_hub_download(
-				repo_id="ReagentGrignard/ragnroll-artifacts",
-				filename="faiss.index",
-				repo_type="dataset",
-				token=os.getenv("HF_KEY"),
-				cache_dir=cache_dir,
-			)
-			meta_path = hf_hub_download(
-				repo_id="ReagentGrignard/ragnroll-artifacts",
-				filename="track_metadata.parquet",
-				repo_type="dataset",
-				token=os.getenv("HF_KEY"),
-				cache_dir=cache_dir,
-			)
-			index = faiss.read_index(index_path)
-			logger.info("FAISS loaded (%d vectors)", index.ntotal)
-			metadata = pd.read_parquet(meta_path, columns=METADATA_COLUMNS)
-			logger.info("metadata loaded (%d rows)", len(metadata))
+	cache_dir = _artifact_cache_dir()
+	index_path = _resolve_index_path(cache_dir)
+	meta_path = _resolve_metadata_path(cache_dir)
+
+	index = _read_faiss_index(index_path)
+	metadata = _read_metadata(meta_path)
+	gc.collect()
 	return index, metadata
 
 start = time.time()
-# index = faiss.read_index(CFG['indexing']['faiss_index_path'])
-# logger.info("FAISS loaded")
-# metadata = pd.read_parquet(CFG['data']['metadata_path'])
-# logger.info("metadata loaded")
 
 _model = None
 
-def _get_model() -> SentenceTransformer:
+
+def _get_model():
 	global _model
 	if _model is None:
+		from sentence_transformers import SentenceTransformer
 		logger.info("loading model...")
 		_model = SentenceTransformer(
-			CFG['indexing']['model_name'],
+			CFG["indexing"]["model_name"],
 			device="cpu",
 			model_kwargs={"token": os.getenv("HF_KEY")},
 		)
 		logger.info("model loaded")
 	return _model
 
-HARD_FILTERS = ['valence', 'energy']
-# SOFT_FILTERS = ['acousticness', 'instrumentalness', 'danceability']
-features = ['energy', 'valence', 'acousticness', 'instrumentalness', 'speechiness', 'danceability']
+HARD_FILTERS = ["valence", "energy"]
 
-def retrieve(query: str, k:int = 200) -> pd.DataFrame:
+def retrieve(query: str, k: int = 200) -> pd.DataFrame:
 	index, metadata = load_artifacts()
 	# BGE model requires prefix to signal it to work with the prompt
 	prefixed = "Represent this sentence for searching relevant passages: " + query
@@ -95,12 +136,12 @@ def retrieve(query: str, k:int = 200) -> pd.DataFrame:
 	distances, indices = index.search(encoded_prompt, k)
 
 	result_df = metadata.iloc[indices[0]].copy()
-	result_df['similarity_score'] = distances[0]
-	result_df = result_df[result_df['popularity'] > 15]
-	return result_df
- 
+	result_df["similarity_score"] = distances[0]
+	return result_df.loc[result_df["popularity"] > 15].reset_index(drop=True)
+
+
 def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
-	filtered = songs.copy()
+	filtered = songs
 	playlist_length = intent.get("playlist_length", 15)
 
 	for feature in HARD_FILTERS:
@@ -115,32 +156,37 @@ def filter_songs(songs: pd.DataFrame, intent: dict) -> pd.DataFrame:
 
 	# Fallback: if too few, return everything
 	if len(filtered) < playlist_length:
-		logger.warning(f"{len(filtered)} after hard filter. Returning full pool.")
+		logger.warning("%d after hard filter. Returning full pool.", len(filtered))
 		return songs
 
-	logger.info(f"{len(filtered)} songs pass hard filter. {playlist_length} is the playlist length.")
+	logger.info("%d songs pass hard filter. playlist_length=%d", len(filtered), playlist_length)
 	return filtered
 
+
 def _label(mid: float) -> str:
-    if mid < 0.2:   return "very low"
-    if mid < 0.4:   return "low"
-    if mid < 0.6:   return "medium"
-    if mid < 0.75:  return "high"
-    return "very high"
+	if mid < 0.2:
+		return "very low"
+	if mid < 0.4:
+		return "low"
+	if mid < 0.6:
+		return "medium"
+	if mid < 0.75:
+		return "high"
+	return "very high"
+
 
 def rebuild_retrieval_query(intent: dict) -> str:
-    parts = []
-    for f in HARD_FILTERS:
-        if f in intent:
-            low, high = intent[f]
-            if [low, high] == [0.0, 1.0]:  # unconstrained, skip
-                continue
-            mid = (low + high) / 2
-            parts.append(f"{_label(mid)} {f}")
-    parts += intent.get("moods", [])
-    parts += intent.get("genres", [])										# GENRE ADDED
-    #parts += intent.get("activities", [])
-    return " ".join(parts)
+	parts = []
+	for f in HARD_FILTERS:
+		if f in intent:
+			low, high = intent[f]
+			if [low, high] == [0.0, 1.0]:
+				continue
+			mid = (low + high) / 2
+			parts.append(f"{_label(mid)} {f}")
+	parts += intent.get("moods", [])
+	parts += intent.get("genres", [])
+	return " ".join(parts)
 
 
 if __name__ == "__main__":
@@ -153,7 +199,9 @@ if __name__ == "__main__":
 
 	print(intent_dict)
 	print(f"[QUERY] {query}")
-	print(filtered[['track_name', 'artist_name', 'genre', 'energy', 'valence', 'similarity_score']].sort_values(by="similarity_score", ascending=False))
+	print(
+		filtered[["track_name", "artist_name", "genre", "energy", "valence", "similarity_score"]]
+		.sort_values(by="similarity_score", ascending=False)
+	)
 	print(f"Songs: {len(results)} --> Filtered: {len(filtered)}")
-
-	print(f"\n\nTime taken: {time.time()-start} \n\n")
+	print(f"\n\nTime taken: {time.time() - start} \n\n")

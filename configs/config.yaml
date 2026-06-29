@@ -2,6 +2,7 @@ data:
   raw_path: "data/processed/cleaned_spotify_1M.csv"
   processed_path: "data/processed/final_processed_tracks.csv"
   metadata_path: "data/indexes/track_metadata.parquet"
+  metadata_slim_path: "data/indexes/track_metadata_slim.parquet"
 
 indexing:
   embeddings_path: "data/indexes/embeddings.npy"

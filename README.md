@@ -4,6 +4,8 @@
 
 🔗 **[Live Demo](https://ragnroll-cool-url-1234.streamlit.app/)**
 
+🎥 **[Video Demo](https://drive.google.com/file/d/1Tbd5m7RU0ExTcc_OQv7vNjVjBlx1EniF/view?usp=sharing)**
+
 Note: Takes 2-3 minutes on first start. Runs seamlessly after that for every new prompt due to improved caching and data management
 
 ---
